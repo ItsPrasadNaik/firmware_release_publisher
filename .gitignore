@@ -1,0 +1,12 @@
+node_modules/
+*.duckdb
+*.log
+.env
+.DS_Store
+dist/
+build/
+coverage/
+.vscode/
+*.swp
+*.swo
+*~
