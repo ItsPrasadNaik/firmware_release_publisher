@@ -1,0 +1,41 @@
+[task]
+# Task metadata for Firmware Release Publisher
+title = "Firmware Release Publisher"
+description = "Build a multi-stage firmware release pipeline with CSV reconciliation, cryptographic signing, and idempotent publication"
+
+# Reward structure
+[reward]
+empty = 0
+full = 1
+
+# Implementation constraints
+[constraints]
+language = "Node.js v20+"
+entry_point = "npm run report"
+timeout_seconds = 30
+
+# Key components required
+[components]
+reconciliation = "DuckDB SQL with CTEs for deduplication and withdrawal processing"
+signing = "OpenSSL CMS detached signatures with certificate/key pair"
+publication = "HTTP POST to gateway with idempotent request tracking"
+persistence = "DuckDB table for publication state (idempotency)"
+
+# Test expectations
+[test]
+expected_bundles = 3
+expected_lines = 6
+golden_file = "environment/reports/publications.expected.txt"
+
+# Environment
+[environment]
+manifest_path = "fixtures/build_manifest.csv"
+database_path = "releases.duckdb"
+gateway_url = "http://127.0.0.1:7070"
+signing_key = "keys/current/current.key.pem"
+signing_cert = "keys/current/current.cert.pem"
+
+[difficulty]
+level = "intermediate"
+estimated_hours = 3
+prerequisites = ["Node.js", "SQL basics", "HTTP concepts", "Linux/OpenSSL"]
