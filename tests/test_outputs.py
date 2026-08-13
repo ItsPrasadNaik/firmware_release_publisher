@@ -1,312 +1,235 @@
 #!/usr/bin/env python3
 """
-Test Output Validator for Firmware Release Publisher
-Compares actual output against golden reference and produces grading report
+Pytest-based validator for Firmware Release Publisher
+Tests the reference solution against grading criteria with proper pytest assertions
 """
 
-import sys
-import json
 import subprocess
-import os
 from pathlib import Path
-from dataclasses import dataclass
-from typing import List, Tuple
 
-@dataclass
-class TestResult:
-    name: str
-    passed: bool
-    expected: str
-    actual: str
-    details: str = ""
+# Get repo root (tests/ directory parent)
+REPO_ROOT = Path(__file__).parent.parent
+ENVIRONMENT_DIR = REPO_ROOT / "environment"
+SOLUTION_DIR = REPO_ROOT / "solution"
+GOLDEN_FILE = ENVIRONMENT_DIR / "reports" / "publications.expected.txt"
+MANIFEST_FILE = ENVIRONMENT_DIR / "fixtures" / "build_manifest.csv"
 
-class PublisherTestValidator:
-    def __init__(self, repo_root: str):
-        self.repo_root = Path(repo_root)
-        self.environment_dir = self.repo_root / "environment"
-        self.solution_dir = self.repo_root / "solution"
-        self.tests_dir = self.repo_root / "tests"
-        self.golden_file = self.environment_dir / "reports" / "publications.expected.txt"
-        self.results: List[TestResult] = []
 
-    def read_golden_output(self) -> str:
-        """Read the expected output from golden file"""
-        if not self.golden_file.exists():
-            raise FileNotFoundError(f"Golden file not found: {self.golden_file}")
-        return self.golden_file.read_text().strip()
+class TestFileStructure:
+    """Verify repository structure"""
+    
+    def test_solution_exists(self):
+        """Test that reference solution exists"""
+        solution_file = SOLUTION_DIR / "release-publisher.mjs"
+        assert solution_file.exists(), f"Solution file not found: {solution_file}"
+    
+    def test_golden_output_exists(self):
+        """Test that golden reference file exists"""
+        assert GOLDEN_FILE.exists(), f"Golden file not found: {GOLDEN_FILE}"
+    
+    def test_manifest_exists(self):
+        """Test that build manifest exists"""
+        assert MANIFEST_FILE.exists(), f"Manifest file not found: {MANIFEST_FILE}"
+    
+    def test_docker_configured(self):
+        """Test that Dockerfile exists"""
+        dockerfile = ENVIRONMENT_DIR / "Dockerfile"
+        assert dockerfile.exists(), f"Dockerfile not found: {dockerfile}"
+    
+    def test_package_json_exists(self):
+        """Test that package.json exists"""
+        package_file = ENVIRONMENT_DIR / "package.json"
+        assert package_file.exists(), f"package.json not found: {package_file}"
 
-    def normalize_output(self, text: str) -> List[str]:
-        """Normalize output: strip whitespace, filter empty lines"""
-        return [line.strip() for line in text.strip().split('\n') if line.strip()]
 
-    def test_file_structure(self) -> bool:
-        """Test 1: Verify required files exist"""
-        required_files = [
-            self.environment_dir / "Dockerfile",
-            self.environment_dir / "package.json",
-            self.environment_dir / "fixtures" / "build_manifest.csv",
-            self.solution_dir / "release-publisher.mjs",
-            self.golden_file,
-        ]
-        
-        all_exist = all(f.exists() for f in required_files)
-        missing = [str(f) for f in required_files if not f.exists()]
-        
-        self.results.append(TestResult(
-            name="File Structure",
-            passed=all_exist,
-            expected="All required files present",
-            actual=f"Found {len(required_files) - len(missing)}/{len(required_files)} files",
-            details=f"Missing: {missing}" if missing else ""
-        ))
-        
-        return all_exist
+class TestSyntaxValidation:
+    """Verify code syntax"""
+    
+    def test_solution_syntax_valid(self):
+        """Test that solution.mjs has valid Node.js syntax"""
+        solution_file = SOLUTION_DIR / "release-publisher.mjs"
+        result = subprocess.run(
+            ["node", "--check", str(solution_file)],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        assert result.returncode == 0, f"Syntax error in solution: {result.stderr}"
 
-    def test_node_syntax(self) -> bool:
-        """Test 2: Verify Node.js syntax"""
-        solution_file = self.solution_dir / "release-publisher.mjs"
-        try:
-            result = subprocess.run(
-                ["node", "--check", str(solution_file)],
-                capture_output=True,
-                timeout=5
-            )
-            passed = result.returncode == 0
-        except Exception as e:
-            passed = False
-        
-        self.results.append(TestResult(
-            name="Node.js Syntax",
-            passed=passed,
-            expected="Valid JavaScript syntax",
-            actual="Valid" if passed else "Syntax error",
-        ))
-        
-        return passed
 
-    def test_csv_manifest(self) -> bool:
-        """Test 3: Verify CSV manifest structure"""
-        manifest_file = self.environment_dir / "fixtures" / "build_manifest.csv"
-        if not manifest_file.exists():
-            self.results.append(TestResult(
-                name="CSV Manifest",
-                passed=False,
-                expected="40 records",
-                actual="File not found"
-            ))
-            return False
-        
-        lines = manifest_file.read_text().strip().split('\n')
+class TestManifestData:
+    """Verify input data"""
+    
+    def test_manifest_has_40_records(self):
+        """Test that build manifest has exactly 40 records"""
+        lines = MANIFEST_FILE.read_text().strip().split('\n')
         record_count = len(lines) - 1  # Subtract header
-        passed = record_count == 40
+        assert record_count == 40, f"Expected 40 records, got {record_count}"
+    
+    def test_manifest_has_required_columns(self):
+        """Test that manifest has required CSV columns"""
+        lines = MANIFEST_FILE.read_text().strip().split('\n')
+        header = lines[0]
+        required_columns = [
+            "entry_id", "bundle_id", "component_id", "version", 
+            "size_bytes", "record_type", "supersedes_id", "recorded_at"
+        ]
+        for column in required_columns:
+            assert column in header, f"Missing required column: {column}"
+
+
+class TestGoldenOutput:
+    """Verify expected output format"""
+    
+    def test_golden_output_has_6_lines(self):
+        """Test that golden output has exactly 6 lines (3 bundles × 2)"""
+        golden = GOLDEN_FILE.read_text().strip()
+        lines = [line.strip() for line in golden.split('\n') if line.strip()]
+        assert len(lines) == 6, f"Expected 6 lines, got {len(lines)}"
+    
+    def test_golden_output_has_bundle_keyword(self):
+        """Test that all output lines contain BUNDLE keyword"""
+        golden = GOLDEN_FILE.read_text().strip()
+        lines = [line.strip() for line in golden.split('\n') if line.strip()]
+        for i, line in enumerate(lines):
+            assert "BUNDLE" in line, f"Line {i+1} missing BUNDLE keyword: {line}"
+    
+    def test_golden_has_three_bundles(self):
+        """Test that output contains exactly 3 bundles (BND-101, BND-102, BND-103)"""
+        golden = GOLDEN_FILE.read_text().strip()
+        assert "BND-101" in golden, "Missing BND-101 in golden output"
+        assert "BND-102" in golden, "Missing BND-102 in golden output"
+        assert "BND-103" in golden, "Missing BND-103 in golden output"
+    
+    def test_golden_output_line_format(self):
+        """Test that output lines follow expected format"""
+        golden = GOLDEN_FILE.read_text().strip()
+        lines = [line.strip() for line in golden.split('\n') if line.strip()]
         
-        self.results.append(TestResult(
-            name="CSV Manifest",
-            passed=passed,
-            expected="40 records",
-            actual=f"{record_count} records"
-        ))
+        # Lines should alternate: SIGNED, PUBLISHED, SIGNED, PUBLISHED, ...
+        for i, line in enumerate(lines):
+            if i % 2 == 0:
+                # Even lines should have SIGNED
+                assert "SIGNED" in line, f"Line {i+1} should contain SIGNED: {line}"
+                assert "KEY=" in line, f"Line {i+1} should contain KEY=: {line}"
+            else:
+                # Odd lines should have PUBLISHED
+                assert "PUBLISHED" in line, f"Line {i+1} should contain PUBLISHED: {line}"
+                assert "RECEIPT=" in line, f"Line {i+1} should contain RECEIPT=: {line}"
+                assert "TOKEN=" in line, f"Line {i+1} should contain TOKEN=: {line}"
+                assert "STATUS=" in line, f"Line {i+1} should contain STATUS=: {line}"
+    
+    def test_golden_output_deterministic_order(self):
+        """Test that bundles appear in ascending order"""
+        golden = GOLDEN_FILE.read_text().strip()
+        lines = [line.strip() for line in golden.split('\n') if line.strip()]
         
-        return passed
-
-    def test_golden_output_format(self) -> bool:
-        """Test 4: Verify expected output format"""
-        try:
-            golden = self.read_golden_output()
-            lines = self.normalize_output(golden)
-            
-            passed = len(lines) == 6
-            
-            self.results.append(TestResult(
-                name="Golden Output Format",
-                passed=passed,
-                expected="6 lines (3 bundles × 2)",
-                actual=f"{len(lines)} lines"
-            ))
-            
-            return passed
-        except Exception as e:
-            self.results.append(TestResult(
-                name="Golden Output Format",
-                passed=False,
-                expected="6 lines",
-                actual=f"Error: {str(e)}"
-            ))
-            return False
-
-    def test_output_structure(self) -> bool:
-        """Test 5: Verify output line structure"""
-        try:
-            golden = self.read_golden_output()
-            lines = self.normalize_output(golden)
-            
-            # Check for BUNDLE keyword in all lines
-            has_bundle_keyword = all("BUNDLE" in line for line in lines)
-            
-            # Check for expected bundle IDs
-            has_bnd_101 = any("BND-101" in line for line in lines)
-            has_bnd_102 = any("BND-102" in line for line in lines)
-            has_bnd_103 = any("BND-103" in line for line in lines)
-            
-            # Check for SIGNED and PUBLISHED keywords
-            has_signed = any("SIGNED" in line for line in lines)
-            has_published = any("PUBLISHED" in line for line in lines)
-            
-            passed = (has_bundle_keyword and has_bnd_101 and has_bnd_102 and 
-                     has_bnd_103 and has_signed and has_published)
-            
-            details = []
-            if not has_bundle_keyword:
-                details.append("Missing BUNDLE keyword")
-            if not has_bnd_101 or not has_bnd_102 or not has_bnd_103:
-                details.append("Missing bundle IDs")
-            if not has_signed:
-                details.append("Missing SIGNED keyword")
-            if not has_published:
-                details.append("Missing PUBLISHED keyword")
-            
-            self.results.append(TestResult(
-                name="Output Structure",
-                passed=passed,
-                expected="Lines with BUNDLE, bundle IDs, SIGNED, PUBLISHED",
-                actual="Structure OK" if passed else "Structure mismatch",
-                details="; ".join(details) if details else ""
-            ))
-            
-            return passed
-        except Exception as e:
-            self.results.append(TestResult(
-                name="Output Structure",
-                passed=False,
-                expected="Valid structure",
-                actual=f"Error: {str(e)}"
-            ))
-            return False
-
-    def test_package_json(self) -> bool:
-        """Test 6: Verify package.json npm scripts"""
-        package_file = self.environment_dir / "package.json"
-        if not package_file.exists():
-            self.results.append(TestResult(
-                name="package.json",
-                passed=False,
-                expected="'report' script configured",
-                actual="File not found"
-            ))
-            return False
+        bundle_order = []
+        for line in lines:
+            if "BUNDLE" in line:
+                for bundle_id in ["BND-101", "BND-102", "BND-103"]:
+                    if bundle_id in line:
+                        bundle_order.append(bundle_id)
+                        break
         
-        try:
-            content = package_file.read_text()
-            has_report_script = '"report"' in content
-            
-            self.results.append(TestResult(
-                name="package.json",
-                passed=has_report_script,
-                expected="'npm run report' script",
-                actual="Script found" if has_report_script else "Script missing"
-            ))
-            
-            return has_report_script
-        except Exception as e:
-            self.results.append(TestResult(
-                name="package.json",
-                passed=False,
-                expected="Valid JSON",
-                actual=f"Error: {str(e)}"
-            ))
-            return False
+        # Should appear in order: BND-101 (2 times), BND-102 (2 times), BND-103 (2 times)
+        expected_order = ["BND-101", "BND-101", "BND-102", "BND-102", "BND-103", "BND-103"]
+        assert bundle_order == expected_order, f"Bundle order wrong. Expected {expected_order}, got {bundle_order}"
 
-    def run_all_tests(self) -> Tuple[int, int]:
-        """Run all tests and return (passed, failed) counts"""
-        tests = [
-            self.test_file_structure,
-            self.test_node_syntax,
-            self.test_csv_manifest,
-            self.test_golden_output_format,
-            self.test_output_structure,
-            self.test_package_json,
+
+class TestProofA:
+    """Verify Proof A: environment/publisher/ is empty (reference solution not in solver location)"""
+    
+    def test_publisher_directory_empty(self):
+        """Test that environment/publisher/ contains no implementation files"""
+        publisher_dir = ENVIRONMENT_DIR / "publisher"
+        
+        # Should exist (directory)
+        assert publisher_dir.exists(), f"publisher/ directory should exist at {publisher_dir}"
+        
+        # Should be empty (or contain only dotfiles)
+        mjs_files = list(publisher_dir.glob("*.mjs"))
+        js_files = list(publisher_dir.glob("*.js"))
+        
+        assert len(mjs_files) == 0, f"publisher/ should not contain .mjs files, found: {mjs_files}"
+        assert len(js_files) == 0, f"publisher/ should not contain .js files, found: {js_files}"
+
+
+class TestProofB:
+    """Verify Proof B: solution/ contains reference implementation"""
+    
+    def test_solution_directory_has_implementation(self):
+        """Test that solution/ contains the reference implementation"""
+        solution_file = SOLUTION_DIR / "release-publisher.mjs"
+        assert solution_file.exists(), f"Solution should contain release-publisher.mjs at {solution_file}"
+        
+        # Should have meaningful content (more than 1KB)
+        size = solution_file.stat().st_size
+        assert size > 1000, f"Solution file is too small ({size} bytes), likely empty or placeholder"
+    
+    def test_solution_imports_required_modules(self):
+        """Test that solution imports duckdb, fs, execSync, http, etc."""
+        solution_file = SOLUTION_DIR / "release-publisher.mjs"
+        content = solution_file.read_text()
+        
+        required_imports = [
+            "duckdb",
+            "readFileSync",
+            "execSync",
+            "http"
         ]
         
-        for test in tests:
-            try:
-                test()
-            except Exception as e:
-                print(f"Error in {test.__name__}: {e}", file=sys.stderr)
-        
-        passed = sum(1 for r in self.results if r.passed)
-        failed = len(self.results) - passed
-        
-        return passed, failed
+        for import_name in required_imports:
+            assert import_name in content, f"Solution should use {import_name}"
 
-    def print_results(self):
-        """Print test results in human-readable format"""
-        print("\n" + "="*60)
-        print("FIRMWARE RELEASE PUBLISHER - TEST RESULTS")
-        print("="*60 + "\n")
-        
-        for i, result in enumerate(self.results, 1):
-            status = "✓ PASS" if result.passed else "✗ FAIL"
-            print(f"[{i}] {result.name}: {status}")
-            print(f"    Expected: {result.expected}")
-            print(f"    Actual:   {result.actual}")
-            if result.details:
-                print(f"    Details:  {result.details}")
-            print()
-        
-        passed = sum(1 for r in self.results if r.passed)
-        failed = len(self.results) - passed
-        total = len(self.results)
-        
-        print("="*60)
-        print(f"SUMMARY: {passed}/{total} tests passed")
-        if failed == 0:
-            print("✓ All tests passed! Ready for submission.")
-        else:
-            print(f"✗ {failed} test(s) failed. Review output above.")
-        print("="*60)
-        
-        return failed == 0
 
-    def to_json(self) -> str:
-        """Export results as JSON for CI/CD integration"""
-        results_data = {
-            "total": len(self.results),
-            "passed": sum(1 for r in self.results if r.passed),
-            "failed": sum(1 for r in self.results if not r.passed),
-            "tests": [
-                {
-                    "name": r.name,
-                    "passed": r.passed,
-                    "expected": r.expected,
-                    "actual": r.actual,
-                    "details": r.details
-                }
-                for r in self.results
-            ]
-        }
-        return json.dumps(results_data, indent=2)
-
-def main():
-    if len(sys.argv) < 2:
-        repo_root = os.getcwd()
-    else:
-        repo_root = sys.argv[1]
+class TestTaskAuthoring:
+    """Verify all 6 required authoring components (per Handbook Section 2)"""
     
-    validator = PublisherTestValidator(repo_root)
+    def test_instruction_md_exists_and_substantial(self):
+        """Test that instruction.md exists and contains substantial content"""
+        instruction_file = REPO_ROOT / "instruction.md"
+        assert instruction_file.exists(), "instruction.md should exist in repo root"
+        content = instruction_file.read_text()
+        assert len(content) > 1000, f"instruction.md too short ({len(content)} bytes), should be >1000"
     
-    try:
-        passed, failed = validator.run_all_tests()
-        success = validator.print_results()
-        
-        # Export JSON if requested
-        if "--json" in sys.argv:
-            print("\nJSON Output:")
-            print(validator.to_json())
-        
-        sys.exit(0 if success else 1)
-    except Exception as e:
-        print(f"Fatal error: {e}", file=sys.stderr)
-        sys.exit(2)
+    def test_task_toml_valid(self):
+        """Test that task.toml exists and contains metadata"""
+        task_file = REPO_ROOT / "task.toml"
+        assert task_file.exists(), "task.toml should exist in repo root"
+        content = task_file.read_text()
+        assert "title" in content, "task.toml should contain task title"
+        assert "[task]" in content or "[metadata]" in content, "task.toml should have TOML structure"
+    
+    def test_author_notes_exists_and_substantial(self):
+        """Test that AUTHOR_NOTES.md exists and contains detailed guidance"""
+        notes_file = REPO_ROOT / "AUTHOR_NOTES.md"
+        assert notes_file.exists(), "AUTHOR_NOTES.md should exist in repo root"
+        content = notes_file.read_text()
+        assert len(content) > 1000, f"AUTHOR_NOTES.md too short ({len(content)} bytes), should be >1000"
+    
+    def test_tests_directory_has_validators(self):
+        """Test that tests/ contains proper validators"""
+        tests_dir = REPO_ROOT / "tests"
+        assert tests_dir.exists(), "tests/ directory should exist"
+        assert (tests_dir / "test.sh").exists(), "tests/test.sh should exist"
+        assert (tests_dir / "test_outputs.py").exists(), "tests/test_outputs.py should exist"
+    
+    def test_solution_directory_exists(self):
+        """Test that solution/ directory exists"""
+        solution_dir = REPO_ROOT / "solution"
+        assert solution_dir.exists(), "solution/ directory should exist in repo root"
+    
+    def test_environment_directory_complete(self):
+        """Test that environment/ is complete with all required subdirectories"""
+        env_dir = REPO_ROOT / "environment"
+        assert env_dir.exists(), "environment/ directory should exist"
+        required_subdirs = ["fixtures", "keys", "publisher", "reports"]
+        for subdir in required_subdirs:
+            subdir_path = env_dir / subdir
+            assert subdir_path.exists() and subdir_path.is_dir(), f"environment/{subdir}/ should exist"
+
 
 if __name__ == "__main__":
-    main()
+    print("Run tests with: pytest tests/test_outputs.py -v")
+    print("Or for verbose output: pytest tests/test_outputs.py -vv")
