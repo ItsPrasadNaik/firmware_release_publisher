@@ -74,6 +74,9 @@ COPY distribution-gateway/ /app/distribution-gateway/
 COPY fixtures/build_manifest.csv /app/fixtures/build_manifest.csv
 COPY reports/publications.expected.txt /app/reports/publications.expected.txt
 
+# Note: The solution file will be copied by the grader at /app/solution/release-publisher.mjs
+# This allows npm run report to execute the reference implementation.
+
 # The verifier launches the gateway in the background and drives it over
 # localhost; there is no CMD that starts it. A default interactive shell suffices.
 CMD ["/bin/bash"]

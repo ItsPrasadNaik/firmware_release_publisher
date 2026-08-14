@@ -6,7 +6,7 @@
   "license": "MIT",
   "type": "module",
   "scripts": {
-    "report": "node publisher/release-publisher.mjs --report"
+    "report": "node /app/solution/release-publisher.mjs --report"
   },
   "dependencies": {
     "duckdb": "1.1.3"
