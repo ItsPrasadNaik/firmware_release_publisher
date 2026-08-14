@@ -183,6 +183,100 @@ class TestProofB:
             assert import_name in content, f"Solution should use {import_name}"
 
 
+class TestSolutionExecution:
+    """CRITICAL: Actually run the solution and verify output (Reward Verification)"""
+    
+    def test_npm_run_report_produces_output(self):
+        """Test that 'npm run report' produces output (executes the solution)"""
+        result = subprocess.run(
+            ["npm", "run", "report"],
+            cwd=str(ENVIRONMENT_DIR),
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        
+        # Execution should succeed (returncode 0)
+        assert result.returncode == 0, f"npm run report failed with code {result.returncode}. stderr: {result.stderr}"
+        
+        # Should produce output
+        output = result.stdout.strip()
+        assert len(output) > 0, "npm run report produced no output"
+    
+    def test_npm_output_matches_golden_exactly(self):
+        """Test that 'npm run report' output matches golden file exactly (REWARD VERIFICATION)"""
+        # Run the solution
+        result = subprocess.run(
+            ["npm", "run", "report"],
+            cwd=str(ENVIRONMENT_DIR),
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        
+        assert result.returncode == 0, f"npm run report failed: {result.stderr}"
+        
+        # Get actual output
+        actual_output = result.stdout.strip()
+        
+        # Get golden output
+        golden_output = GOLDEN_FILE.read_text().strip()
+        
+        # Compare line by line
+        actual_lines = [line.strip() for line in actual_output.split('\n') if line.strip()]
+        golden_lines = [line.strip() for line in golden_output.split('\n') if line.strip()]
+        
+        # Line count must match
+        assert len(actual_lines) == len(golden_lines), \
+            f"Output line count mismatch. Expected {len(golden_lines)}, got {len(actual_lines)}. " \
+            f"Actual:\n{actual_output}\n\nExpected:\n{golden_output}"
+        
+        # Each line must match exactly
+        for i, (actual, golden) in enumerate(zip(actual_lines, golden_lines)):
+            assert actual == golden, \
+                f"Output mismatch at line {i+1}.\n" \
+                f"Expected: {golden}\n" \
+                f"Got:      {actual}"
+    
+    def test_npm_output_has_all_bundles(self):
+        """Test that solution output contains all 3 bundles"""
+        result = subprocess.run(
+            ["npm", "run", "report"],
+            cwd=str(ENVIRONMENT_DIR),
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        
+        assert result.returncode == 0, f"npm run report failed: {result.stderr}"
+        output = result.stdout
+        
+        # All bundles must be present
+        assert "BND-101" in output, "Output missing BND-101"
+        assert "BND-102" in output, "Output missing BND-102"
+        assert "BND-103" in output, "Output missing BND-103"
+    
+    def test_npm_output_has_signing_and_publication_records(self):
+        """Test that solution output has SIGNED and PUBLISHED records for each bundle"""
+        result = subprocess.run(
+            ["npm", "run", "report"],
+            cwd=str(ENVIRONMENT_DIR),
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        
+        assert result.returncode == 0, f"npm run report failed: {result.stderr}"
+        output = result.stdout
+        
+        # Count SIGNED and PUBLISHED records
+        signed_count = output.count("SIGNED")
+        published_count = output.count("PUBLISHED")
+        
+        assert signed_count == 3, f"Expected 3 SIGNED records, got {signed_count}"
+        assert published_count == 3, f"Expected 3 PUBLISHED records, got {published_count}"
+
+
 class TestTaskAuthoring:
     """Verify all 6 required authoring components (per Handbook Section 2)"""
     
